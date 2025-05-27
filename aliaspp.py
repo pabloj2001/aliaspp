@@ -3,6 +3,7 @@ __version__ = "0.1.0"
 
 import sys
 import os
+from typing import List, Tuple
 
 aliases = {}
 
@@ -92,12 +93,12 @@ class Environment:
         except Exception as e:
             print(f"Error reading environment file: {e}")
     
-    def getVar(self, var_name: str, default=None):
+    def get_var(self, var_name: str, default=None):
         if var_name in self.vars:
             return self.vars[var_name]
         return default
     
-    def saveVar(self, var_name: str, value: str):
+    def save_var(self, var_name: str, value: str):
         self.vars[var_name] = value
         # Write all variables to the file
         try:
@@ -108,108 +109,124 @@ class Environment:
             print(f"Error writing to environment file: {e}")
 
 
-class ArgValue:
-    def __init__(self, index: int, value: str, consume: bool = True):
-        self.index = index
-        self.value = value
-        self.consume = consume
-
-
 class CommandBuilder:
 
     def base(self, command: str) -> 'CommandBuilder':
         """
         Set the base command.
         """
-        pass
+        return self
 
-    def getArg(self, index: int, default=None, error: str = None) -> 'ArgValue':
+    def get_arg(self, index: int, default=None, error: str = None, consume: bool = True) -> str:
         """
         Get an argument by index.
         """
         pass
 
-    def getFlag(self, flag: str, default=None, error: str = None) -> str:
+    def get_flag(self, flag: str, default=None, error: str = None) -> str:
         """
         Get a flag value.
         """
         pass
 
-    def getFromEnv(self, var_name: str, default=None, error: str = None) -> str:
+    def set_flag(self, flag: str, value: str, overwrite: bool = False, dashes: int = 0) -> 'CommandBuilder':
+        """
+        Set a flag value.
+        If `dashes` is provided, it determines the number of dashes:
+        - 1: single dash (e.g., -f)
+        - 2: double dash (e.g., --flag)
+        - else: default behavior based on flag length
+        """
+        return self
+    
+    def delete_flag(self, flag: str) -> 'CommandBuilder':
+        """
+        Delete a flag.
+        """
+        return self
+
+    def update_arg(self, index: int, func: callable) -> 'CommandBuilder':
+        """
+        Update an argument value.
+        """
+        return self
+
+    def append_arg(self, arg: str) -> 'CommandBuilder':
+        """
+        Append an argument to the command.
+        """
+        return self
+
+    def append_command(self, base: str, append_operand='&&') -> 'CommandBuilder':
+        """
+        Append a new command to the end of the current command.
+        Return a new CommandBuilder for the appended command.
+        """
+        return self
+
+    def is_set(self, flag: str, has_value: bool = False) -> bool:
+        """
+        Check if a flag is set.
+        """
+        return False
+    
+    def is_not_set(self, flag: str) -> bool:
+        """
+        Check if a flag is not set.
+        """
+        return False
+    
+    def has_arg(self, index: int) -> bool:
+        """
+        Check if an argument exists at the given index.
+        """
+        return False
+    
+    def not_has_arg(self, index: int) -> bool:
+        """
+        Check if an argument does not exist at the given index.
+        """
+        return False
+
+    def if_set(self, flag: str, has_value: bool = True) -> 'CommandBuilder':
+        """
+        Check if a flag is set.
+        """
+        return self
+
+    def if_not_set(self, flag: str) -> 'CommandBuilder':
+        """
+        Check if a flag is not set.
+        """
+        return self
+
+    def if_has_arg(self, index: int) -> 'CommandBuilder':
+        """
+        Check if an argument exists at the given index.
+        """
+        return self
+
+    def if_not_has_arg(self, index: int) -> 'CommandBuilder':
+        """
+        Check if an argument does not exist at the given index.
+        """
+        return self
+    
+    def get_from_env(self, var_name: str, default=None, error: str = None) -> str:
         """
         Get a variable from the environment.
         """
         pass
 
-    def setFlag(self, flag: str, value: str, overwrite: bool = False) -> 'CommandBuilder':
-        """
-        Set a flag value.
-        """
-        pass
-
-    def updateArg(self, index: int, func: callable) -> 'CommandBuilder':
-        """
-        Update an argument value.
-        """
-        pass
-
-    def appendArg(self, arg: str) -> 'CommandBuilder':
-        """
-        Append an argument to the command.
-        """
-        pass
-
-    def isSet(self, flag: str, requires_value: bool = False) -> bool:
-        """
-        Check if a flag is set.
-        """
-        return flag in self.flags
-    
-    def isNotSet(self, flag: str) -> bool:
-        """
-        Check if a flag is not set.
-        """
-        return flag not in self.flags
-    
-    def hasArg(self, index: int) -> bool:
-        """
-        Check if an argument exists at the given index.
-        """
-        return index > -1 and index < len(self.args)
-    
-    def notHasArg(self, index: int) -> bool:
-        """
-        Check if an argument does not exist at the given index.
-        """
-        return index < 0 or index >= len(self.args)
-
-    def ifSet(self, flag: str, requires_value: bool = False) -> 'CommandBuilder':
-        """
-        Check if a flag is set.
-        """
-        pass
-
-    def ifNotSet(self, flag: str) -> 'CommandBuilder':
-        """
-        Check if a flag is not set.
-        """
-        pass
-
-    def ifHasArg(self, index: int) -> 'CommandBuilder':
-        """
-        Check if an argument exists at the given index.
-        """
-        pass
-
-    def ifNotHasArg(self, index: int) -> 'CommandBuilder':
-        """
-        Check if an argument does not exist at the given index.
-        """
-        pass
-
-    def saveToEnv(self, flag: str, env_var: str) -> 'CommandBuilder':
+    def save_to_env(self, flag: str, env_var: str) -> 'CommandBuilder':
         """
         Save a flag to the environment.
+        """
+        return self
+    
+    def build_command(self) -> str:
+        """
+        Build the command string.
         """
         pass
 
@@ -233,6 +250,7 @@ class OngoingCommandBuilder(CommandBuilder):
         self.base_command = ''
         self.flags = {}
         self.args = []
+        self.appended_commands: List[Tuple[CommandBuilder, str]] = []
         self.env = env if env else Environment('~/.aliaspp/env')
         self.consumed_args = []
 
@@ -241,21 +259,25 @@ class OngoingCommandBuilder(CommandBuilder):
         while i < len(args):
             if args[i].startswith('-'):
                 if args[i] == '--':
+                    # TODO: Handle double dash case
                     i += 1
                     continue
+
+                double_dash = False
                 if args[i][1] == '-':
                     flag = args[i][2:]
+                    double_dash = True
                 else:
                     flag = args[i][1:]
 
                 if '=' in flag:
                     flag, value = flag.split('=')
-                    self.flags[flag] = value
+                    self.flags[flag] = (value, double_dash)
                 elif i + 1 < len(args) and not args[i + 1].startswith('-'):
-                    self.flags[flag] = args[i + 1]
+                    self.flags[flag] = (args[i + 1], double_dash)
                     i += 1
                 else:
-                    self.flags[flag] = None
+                    self.flags[flag] = (None, double_dash)
             else:
                 self.args.append(args[i])
             i += 1
@@ -267,85 +289,103 @@ class OngoingCommandBuilder(CommandBuilder):
         self.base_command = command
         return self
     
-    def getArg(self, index: int, default=None, error: str = None, consume: bool = True) -> ArgValue:
+    def get_arg(self, index: int, default=None, error: str = None, consume: bool = True) -> str:
         if index > -1 and index < len(self.args):
-            return ArgValue(index, self.args[index], consume)
+            if consume and index not in self.consumed_args:
+                self.consumed_args.append(index)
+            return self.args[index]
         
         if default is not None:
-            return ArgValue(-1, default)
+            return default
         
         _exit_with_error(error if error is not None else f"Argument at index {index} not found")
     
-    def getFlag(self, flag: str, default=None, error: str = None) -> str:
+    def get_flag(self, flag: str, default=None, error: str = None) -> str:
         if flag in self.flags:
-            return self.flags[flag]
+            return self.flags[flag][0]
         
         if default is not None:
             return default
         
         _exit_with_error(error if error is not None else f"Flag '{flag}' not set")
     
-    def getFromEnv(self, var_name: str, default=None) -> str:
-        return self.env.getVar(var_name, default)
-    
-    def setFlag(self, flag: str, value: str | ArgValue = None, overwrite: bool = False) -> CommandBuilder:
+    def set_flag(self, flag: str, value: str = None, overwrite: bool = False, dashes: int = 0) -> CommandBuilder:
         if flag in self.flags and not overwrite:
             return self
-        
-        if isinstance(value, ArgValue):
-            if value.consume:
-                self.consumed_args.append(value.index)
-            value = value.value
 
-        self.flags[flag] = _clean_value(value)
+        double_dash = len(flag) > 1
+        if dashes > 0:
+            if dashes > 2:
+                _exit_with_error("Dashes must be 0, 1, or 2")
+            double_dash = dashes == 2
+        
+        self.flags[flag] = (_clean_value(value), double_dash)
         return self
     
-    def updateArg(self, index: int, func: callable) -> CommandBuilder:
+    def delete_flag(self, flag: str) -> CommandBuilder:
+        if flag in self.flags:
+            del self.flags[flag]
+            return self
+        
+        _exit_with_error(f"Flag '{flag}' not found")
+    
+    def update_arg(self, index: int, func: callable) -> CommandBuilder:
         if index > -1 and index < len(self.args):
             self.args[index] = _clean_value(func(self.args[index]))
             return self
         
         _exit_with_error(f"Argument at index {index} not found")
     
-    def appendArg(self, arg: str) -> CommandBuilder:
+    def append_arg(self, arg: str) -> CommandBuilder:
         if arg is not None:
             self.args.append(_clean_value(arg))
         return self
     
-    def isSet(self, flag: str, requires_value: bool = False) -> bool:
-        return flag in self.flags and (not requires_value or self.flags[flag] is not None)
+    def append_command(self, base: str, append_operand='&&') -> CommandBuilder:
+        if base is not None:
+            new_command = OngoingCommandBuilder([], self.env)
+            new_command.base(base)
+            self.appended_commands.append((new_command, append_operand))
+            return new_command
+        
+        raise ValueError("Base command is not set")
     
-    def isNotSet(self, flag: str) -> bool:
+    def is_set(self, flag: str, has_value: bool = True) -> bool:
+        return flag in self.flags and ((has_value and self.flags[flag][0] is not None) or (not has_value and self.flags[flag][0] is None))
+    
+    def is_not_set(self, flag: str) -> bool:
         return flag not in self.flags
     
-    def hasArg(self, index: int) -> bool:
+    def has_arg(self, index: int) -> bool:
         return index > -1 and index < len(self.args)
     
-    def notHasArg(self, index: int) -> bool:
+    def not_has_arg(self, index: int) -> bool:
         return index < 0 or index >= len(self.args)
 
-    def ifSet(self, flag: str, requires_value: bool = False) -> CommandBuilder:
-        return self if self.isSet(flag, requires_value) else EmptyCommandBuilder()
+    def if_set(self, flag: str, has_value: bool = True) -> CommandBuilder:
+        return self if self.is_set(flag, has_value) else EmptyCommandBuilder()
 
-    def ifNotSet(self, flag: str) -> CommandBuilder:
-        return self if self.isNotSet(flag) else EmptyCommandBuilder()
+    def if_not_set(self, flag: str) -> CommandBuilder:
+        return self if self.is_not_set(flag) else EmptyCommandBuilder()
     
-    def ifHasArg(self, index: int) -> CommandBuilder:
-        return self if self.hasArg(index) else EmptyCommandBuilder()
+    def if_has_arg(self, index: int) -> CommandBuilder:
+        return self if self.has_arg(index) else EmptyCommandBuilder()
     
-    def ifNotHasArg(self, index: int) -> CommandBuilder:
-        return self if self.notHasArg(index) else EmptyCommandBuilder()
+    def if_not_has_arg(self, index: int) -> CommandBuilder:
+        return self if self.not_has_arg(index) else EmptyCommandBuilder()
     
-    def saveToEnv(self, flag: str, env_var: str) -> CommandBuilder:
-        # Placeholder for saving to environment logic
+    def get_from_env(self, var_name: str, default=None) -> str:
+        return self.env.get_var(var_name, default)
+    
+    def save_to_env(self, flag: str, env_var: str) -> CommandBuilder:
         if flag not in self.flags:
             _exit_with_error(f"Cannot save {flag} to environment variable because it is not set")
 
-        value = self.flags[flag]
-        self.env.saveVar(env_var, value)
+        value = self.flags[flag][0]
+        self.env.save_var(env_var, value)
         return self
-
-    def execute(self, dry_run=False):
+    
+    def build_command(self) -> str:
         command = self.base_command.strip()
         if not command:
             raise ValueError("Base command is not set")
@@ -358,13 +398,30 @@ class OngoingCommandBuilder(CommandBuilder):
             command += (' ' if len(self.args) > 0 else '') + ' '.join(self.args)
 
         for flag, value in self.flags.items():
-            if len(flag) == 1:
-                command += f' -{flag}'
-            else:
+            if flag == 'alias-dry-run':
+                continue
+
+            value, double_dash = value
+            if double_dash:
                 command += f' --{flag}'
+            else:
+                command += f' -{flag}'
 
             if value is not None:
                 command += f' {value}'
+
+        for appended_command, append_operand in self.appended_commands:
+            appended_command_str = appended_command.build_command()
+            if appended_command_str:
+                command += f' {append_operand} {appended_command_str}'
+
+        return command
+
+    def execute(self, dry_run=False):
+        command = self.build_command()
+
+        if 'alias-dry-run' in self.flags:
+            dry_run = True
 
         # Run the command
         if dry_run:

@@ -6,33 +6,46 @@ from aliaspp import alias, execute, Environment, CommandBuilder
 @alias
 def gc(cb: CommandBuilder):
     cb.base('git checkout')
-    if cb.hasArg(0):
-        cb.updateArg(0, lambda prev_value: 'pablo/' + prev_value)
+    if cb.has_arg(0):
+        cb.update_arg(0, lambda prev_value: 'pablo/' + prev_value)
     else:
-        if cb.isSet('b'):
-            cb.setFlag('b', 'pablo/' + cb.getFlag('b'), overwrite=True)
+        if cb.is_set('b'):
+            cb.set_flag('b', 'pablo/' + cb.get_flag('b'), overwrite=True)
         else:
-            cb.appendArg('master')
+            cb.append_arg('master')
 
 # gb = git branch
 # gb -D branch = git branch -D pablo/branch
 @alias
 def gb(cb: CommandBuilder):
     cb.base('git branch')
-    cb.ifSet('D', requires_value=True).setFlag('D', f"pablo/{cb.getFlag('D')}", overwrite=True)
+    cb.if_set('D').set_flag('D', f"pablo/{cb.get_flag('D')}", overwrite=True)
 
 # gac "message" = git add . && git commit -m "message"
 @alias
 def gac(cb: CommandBuilder):
     cb.base('git add . && git commit')
-    cb.ifNotSet('m').setFlag('m', cb.getArg(0, error='Please provide a commit message'))
+    cb.if_not_set('m').set_flag('m', cb.get_arg(0, error='Please provide a commit message'))
 
 # gs = git status
 @alias
 def gs(cb: CommandBuilder):
     cb.base('git status')
 
+# mb = make build
+# mb --alert = make build; terminal-notifier -message "Build Complete"
+@alias
+def mb(cb: CommandBuilder):
+    cb.base('make build')
+    if cb.is_set('alert', has_value=False):
+        cb.delete_flag('alert')
+        alertCb = cb.append_command('terminal-notifier', ';')
+        alertCb.set_flag('message', 'Build Complete', dashes=1)
+
+# You can also perform a dry run by adding the '--alias-dry-run' flag
 execute(env=Environment('env'), dry_run=True)
 
-# alias gc="python3 ~/.aliaspp/sample.py gc"
+# Add the following line to your shell configuration file (e.g., .bashrc, .zshrc) to use these aliases:
+# alias <alias-name>="python3 ~/aliaspp/sample.py <alias-name>"
+# Ex: alias gc="python3 ~/aliaspp/sample.py gc"
 # in the future "aliaspp setup sample.py -v python3" will add this alias for you
