@@ -1,4 +1,4 @@
-from aliaspp import alias, execute, Environment, CommandBuilder
+from aliaspp import alias, aliases, execute, Environment, CommandBuilder, ValueRequirement
 
 # gc = git checkout master
 # gc -b new_branch = git checkout -b pablo/new_branch
@@ -9,17 +9,15 @@ def gc(cb: CommandBuilder):
     if cb.has_arg(0):
         cb.update_arg(0, lambda prev_value: 'pablo/' + prev_value)
     else:
-        if cb.is_set('b'):
-            cb.set_flag('b', 'pablo/' + cb.get_flag('b'), overwrite=True)
-        else:
-            cb.append_arg('master')
+        cb.if_set('b', ValueRequirement.REQUIRE_VALUE).set_flag('b', f"pablo/{cb.get_flag('b')}")
+        cb.if_not_set('b').append_arg('master')
 
 # gb = git branch
 # gb -D branch = git branch -D pablo/branch
 @alias
 def gb(cb: CommandBuilder):
     cb.base('git branch')
-    cb.if_set('D').set_flag('D', f"pablo/{cb.get_flag('D')}", overwrite=True)
+    cb.if_set('D', ValueRequirement.REQUIRE_VALUE).set_flag('D', f"pablo/{cb.get_flag('D')}")
 
 # gac "message" = git add . && git commit -m "message"
 @alias
@@ -27,20 +25,20 @@ def gac(cb: CommandBuilder):
     cb.base('git add . && git commit')
     cb.if_not_set('m').set_flag('m', cb.get_arg(0, error='Please provide a commit message'))
 
-# gs = git status
-@alias
-def gs(cb: CommandBuilder):
-    cb.base('git status')
-
 # mb = make build
 # mb --alert = make build; terminal-notifier -message "Build Complete"
 @alias
 def mb(cb: CommandBuilder):
     cb.base('make build')
-    if cb.is_set('alert', has_value=False):
-        cb.delete_flag('alert')
+    if cb.is_set('alert'):
+        cb.remove_flag('alert')
         alertCb = cb.append_command('terminal-notifier', ';')
         alertCb.set_flag('message', 'Build Complete', dashes=1)
+
+aliases({
+    'gs': 'git status',
+    'cls': 'clear',
+})
 
 # You can also perform a dry run by adding the '--alias-dry-run' flag
 execute(env=Environment('env'), dry_run=True)

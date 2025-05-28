@@ -3,9 +3,28 @@ __version__ = "0.1.0"
 
 import sys
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Callable
+from enum import Enum
 
-aliases = {}
+_aliases = {}
+
+def _add_alias(alias_name: str, func: Callable[['CommandBuilder'], None]):
+    """
+    Add an alias to the global aliases dictionary.
+    """
+    if alias_name in _aliases:
+        raise ValueError(f"Alias '{alias_name}' already exists")
+    _aliases[alias_name] = func
+
+def _crate_alias_func(alias_base: str, func: Callable[['CommandBuilder'], None] = None) -> Callable[['CommandBuilder'], None]:
+    """
+    Create a function that sets the base command and calls the provided function.
+    """
+    def alias_func(cb: 'CommandBuilder'):
+        cb.base(alias_base)
+        if func is not None:
+            func(cb)
+    return alias_func
 
 def alias(alias = None):
     """
@@ -13,24 +32,41 @@ def alias(alias = None):
     """
     def decorator(func):
         if not callable(func):
-            raise ValueError("Function is not callable")
+            raise ValueError("Alias is not a function")
         
-        alias_name = alias.strip()
-        if alias_name in aliases:
-            raise ValueError(f"Alias '{alias_name}' already exists")
-        aliases[alias_name] = func
-        return func
+        if isinstance(alias, str):
+            alias_name = alias.strip()
+            _add_alias(alias_name, func)
+            return func
+        elif isinstance(alias, dict):
+            # If alias is a dictionary, it means multiple aliases are defined
+            funcs = {}
+            for alias_name, base_command in alias.items():
+                current_alias_func = _crate_alias_func(base_command, func)
+                _add_alias(alias_name, current_alias_func)
+                funcs[alias_name] = current_alias_func
+            return funcs
 
-    if isinstance(alias, str):
+    if isinstance(alias, str) or isinstance(alias, dict):
+        # If alias is a string or dict, it's because the decorator is used with parentheses
         return decorator
     elif callable(alias):
+        # If alias is a callable, it's because the decorator is used without parentheses
         alias_name = alias.__name__
-        if alias_name in aliases:
-            raise ValueError(f"Alias '{alias_name}' already exists")
-        aliases[alias_name] = alias
+        _add_alias(alias_name, alias)
         return alias
     else:
-        raise ValueError("Alias must be a string or a callable function")
+        raise ValueError("Alias must be a string, a dictionary, or a callable function")
+
+def aliases(alias_dict: dict = None):
+    """
+    Function to define multiple simple aliases at once by passing a dictionary of alias names and their base commands.
+    """
+    if alias_dict is None:
+        return
+
+    for alias_name, alias_base in alias_dict.items():
+        _add_alias(alias_name, _crate_alias_func(alias_base))
 
 def execute(env=None, dry_run=False):
     """
@@ -43,7 +79,7 @@ def execute(env=None, dry_run=False):
     args = sys.argv[2:]
     cb = OngoingCommandBuilder(args, env)
 
-    for alias_name, func in aliases.items():
+    for alias_name, func in _aliases.items():
         if sys.argv[1] == alias_name:
             func(cb)
             cb.execute(dry_run)
@@ -76,7 +112,11 @@ class Environment:
             raise ValueError("Environment file path cannot be empty")
 
         self.vars = {}
-        self.env_file_path = env_file_path
+        self.env_file_path = os.path.abspath(os.path.expanduser(env_file_path))
+
+        dir_path = os.path.dirname(self.env_file_path)
+        if dir_path and not os.path.isdir(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
         
         # Read existing environment variables from the file
         try:
@@ -92,22 +132,41 @@ class Environment:
             print(f"Environment file {self.env_file_path} not found. Creating a new one.")
         except Exception as e:
             print(f"Error reading environment file: {e}")
-    
-    def get_var(self, var_name: str, default=None):
-        if var_name in self.vars:
-            return self.vars[var_name]
-        return default
-    
-    def save_var(self, var_name: str, value: str):
-        self.vars[var_name] = value
-        # Write all variables to the file
+
+    def _write_env_file(self):
+        """
+        Write the current environment variables to the file.
+        """
         try:
             with open(self.env_file_path, 'w') as f:
                 for key, value in self.vars.items():
                     f.write(f"{key}={value}\n")
         except Exception as e:
             print(f"Error writing to environment file: {e}")
+    
+    def get_var(self, var_name: str, default=None) -> str:
+        if var_name in self.vars:
+            return self.vars[var_name]
+        return default
+    
+    def save_var(self, var_name: str, value: str):
+        self.vars[var_name] = value
+        self._write_env_file()
 
+    def clear_var(self, var_name: str):
+        if var_name in self.vars:
+            del self.vars[var_name]
+            self._write_env_file()
+
+
+class ValueRequirement(Enum):
+    """
+    Enum to indicate whether a value is required for a flag.
+    """
+    NOT_REQUIRED = 0  # No value required, e.g., -f
+    REQUIRE_VALUE = 1  # Value required, e.g., -f value
+    REQUIRE_NO_VALUE = 2  # No value allowed, e.g., -f without a value
+    
 
 class CommandBuilder:
 
@@ -129,9 +188,11 @@ class CommandBuilder:
         """
         pass
 
-    def set_flag(self, flag: str, value: str, overwrite: bool = False, dashes: int = 0) -> 'CommandBuilder':
+    def set_flag(self, flag: str, value: str, overwrite: bool = True, dashes: int = 0) -> 'CommandBuilder':
         """
         Set a flag value.
+        If `overwrite` is False, it will not overwrite an existing flag.
+        If `value` is None, it will set the flag without a value.
         If `dashes` is provided, it determines the number of dashes:
         - 1: single dash (e.g., -f)
         - 2: double dash (e.g., --flag)
@@ -139,7 +200,7 @@ class CommandBuilder:
         """
         return self
     
-    def delete_flag(self, flag: str) -> 'CommandBuilder':
+    def remove_flag(self, flag: str) -> 'CommandBuilder':
         """
         Delete a flag.
         """
@@ -164,7 +225,7 @@ class CommandBuilder:
         """
         return self
 
-    def is_set(self, flag: str, has_value: bool = False) -> bool:
+    def is_set(self, flag: str, value_requirement: ValueRequirement = ValueRequirement.NOT_REQUIRED) -> bool:
         """
         Check if a flag is set.
         """
@@ -188,7 +249,7 @@ class CommandBuilder:
         """
         return False
 
-    def if_set(self, flag: str, has_value: bool = True) -> 'CommandBuilder':
+    def if_set(self, flag: str, value_requirement: ValueRequirement = ValueRequirement.NOT_REQUIRED) -> 'CommandBuilder':
         """
         Check if a flag is set.
         """
@@ -223,6 +284,12 @@ class CommandBuilder:
         Save a flag to the environment.
         """
         return self
+
+    def clear_from_env(self, env_var: str) -> 'CommandBuilder':
+        """
+        Clear a variable from the environment.
+        """
+        return self
     
     def build_command(self) -> str:
         """
@@ -242,6 +309,7 @@ class EmptyCommandBuilder(CommandBuilder):
     def __bool__(self):
         return False
 
+
 class OngoingCommandBuilder(CommandBuilder):
     """
     Class to build commands.
@@ -259,7 +327,7 @@ class OngoingCommandBuilder(CommandBuilder):
         while i < len(args):
             if args[i].startswith('-'):
                 if args[i] == '--':
-                    # TODO: Handle double dash case
+                    self.args.append(args[i])
                     i += 1
                     continue
 
@@ -295,21 +363,21 @@ class OngoingCommandBuilder(CommandBuilder):
                 self.consumed_args.append(index)
             return self.args[index]
         
-        if default is not None:
-            return default
-        
-        _exit_with_error(error if error is not None else f"Argument at index {index} not found")
+        if error is not None and default is None:
+            _exit_with_error(error)
+
+        return default
     
     def get_flag(self, flag: str, default=None, error: str = None) -> str:
         if flag in self.flags:
             return self.flags[flag][0]
         
-        if default is not None:
-            return default
-        
-        _exit_with_error(error if error is not None else f"Flag '{flag}' not set")
+        if error is not None and default is None:
+            _exit_with_error(error)
+
+        return default
     
-    def set_flag(self, flag: str, value: str = None, overwrite: bool = False, dashes: int = 0) -> CommandBuilder:
+    def set_flag(self, flag: str, value: str = None, overwrite: bool = True, dashes: int = 0) -> CommandBuilder:
         if flag in self.flags and not overwrite:
             return self
 
@@ -322,12 +390,10 @@ class OngoingCommandBuilder(CommandBuilder):
         self.flags[flag] = (_clean_value(value), double_dash)
         return self
     
-    def delete_flag(self, flag: str) -> CommandBuilder:
+    def remove_flag(self, flag: str) -> CommandBuilder:
         if flag in self.flags:
             del self.flags[flag]
-            return self
-        
-        _exit_with_error(f"Flag '{flag}' not found")
+        return self
     
     def update_arg(self, index: int, func: callable) -> CommandBuilder:
         if index > -1 and index < len(self.args):
@@ -342,16 +408,26 @@ class OngoingCommandBuilder(CommandBuilder):
         return self
     
     def append_command(self, base: str, append_operand='&&') -> CommandBuilder:
-        if base is not None:
-            new_command = OngoingCommandBuilder([], self.env)
-            new_command.base(base)
-            self.appended_commands.append((new_command, append_operand))
-            return new_command
+        if base is None:
+            raise ValueError("Base command is not set")
         
-        raise ValueError("Base command is not set")
+        new_command = OngoingCommandBuilder([], self.env)
+        new_command.base(base)
+        self.appended_commands.append((new_command, append_operand))
+        return new_command
     
-    def is_set(self, flag: str, has_value: bool = True) -> bool:
-        return flag in self.flags and ((has_value and self.flags[flag][0] is not None) or (not has_value and self.flags[flag][0] is None))
+    def is_set(self, flag: str, value_requirement: ValueRequirement = ValueRequirement.NOT_REQUIRED) -> bool:
+        flag_exists = flag in self.flags
+        if not flag_exists:
+            return False
+        
+        has_value = self.flags[flag][0] is not None    
+        if value_requirement == ValueRequirement.REQUIRE_VALUE:
+            return has_value
+        elif value_requirement == ValueRequirement.REQUIRE_NO_VALUE:
+            return not has_value
+        
+        return True
     
     def is_not_set(self, flag: str) -> bool:
         return flag not in self.flags
@@ -362,8 +438,8 @@ class OngoingCommandBuilder(CommandBuilder):
     def not_has_arg(self, index: int) -> bool:
         return index < 0 or index >= len(self.args)
 
-    def if_set(self, flag: str, has_value: bool = True) -> CommandBuilder:
-        return self if self.is_set(flag, has_value) else EmptyCommandBuilder()
+    def if_set(self, flag: str, value_requirement: ValueRequirement = ValueRequirement.NOT_REQUIRED) -> CommandBuilder:
+        return self if self.is_set(flag, value_requirement) else EmptyCommandBuilder()
 
     def if_not_set(self, flag: str) -> CommandBuilder:
         return self if self.is_not_set(flag) else EmptyCommandBuilder()
@@ -383,6 +459,10 @@ class OngoingCommandBuilder(CommandBuilder):
 
         value = self.flags[flag][0]
         self.env.save_var(env_var, value)
+        return self
+    
+    def clear_from_env(self, env_var: str) -> CommandBuilder:
+        self.env.clear_var(env_var)
         return self
     
     def build_command(self) -> str:
