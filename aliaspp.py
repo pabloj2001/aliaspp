@@ -68,7 +68,7 @@ def aliases(alias_dict: dict = None):
     for alias_name, alias_base in alias_dict.items():
         _add_alias(alias_name, _crate_alias_func(alias_base))
 
-def execute(env=None, dry_run=False):
+def execute(env: 'Environment' = None, dry_run=False):
     """
     Execute the command with the given environment.
     """
@@ -76,6 +76,12 @@ def execute(env=None, dry_run=False):
         print("No command provided")
         return
 
+    if sys.argv[1] == '--install-aliases':
+        if env is None:
+            env = Environment('~/.aliaspp')
+        _install_aliases(os.path.join(env.env_path, '.aliases'))
+        return
+    
     args = sys.argv[2:]
     cb = OngoingCommandBuilder(args, env)
 
@@ -102,21 +108,34 @@ def _clean_value(value: str) -> str:
         value = f'"{value}"'
     return value
 
+def _install_aliases(aliases_file: str):
+    print(f"Installing aliases to {aliases_file}")
+    try:
+        with open(aliases_file, 'w') as f:
+            for alias_name in _aliases.keys():
+                f.write(f"alias {alias_name}=\"python3 {os.path.abspath(sys.argv[0])} {alias_name}\"\n")
+
+        print(f"Installed {len(_aliases)} aliases to {aliases_file}. Please add the following line to your shell " +
+              "configuration file (e.g., .bashrc, .zshrc):")
+        print(f"\n\tsource {aliases_file}\n")
+    except Exception as e:
+        print(f"Error installing aliases: {e}")
+
 
 class Environment:
     """
     Class to represent an environment.
     """
-    def __init__(self, env_file_path):
-        if env_file_path is None or env_file_path == '':
-            raise ValueError("Environment file path cannot be empty")
+    def __init__(self, env_path: str):
+        if env_path is None or env_path == '':
+            raise ValueError("Environment path cannot be empty")
 
         self.vars = {}
-        self.env_file_path = os.path.abspath(os.path.expanduser(env_file_path))
+        self.env_path = os.path.abspath(os.path.expanduser(env_path))
+        if self.env_path and not os.path.isdir(self.env_path):
+            os.makedirs(self.env_path, exist_ok=True)
 
-        dir_path = os.path.dirname(self.env_file_path)
-        if dir_path and not os.path.isdir(dir_path):
-            os.makedirs(dir_path, exist_ok=True)
+        self.env_file_path = os.path.join(self.env_path, 'env')
         
         # Read existing environment variables from the file
         try:
@@ -314,12 +333,12 @@ class OngoingCommandBuilder(CommandBuilder):
     """
     Class to build commands.
     """
-    def __init__(self, args: list, env: Environment = None):
+    def __init__(self, args: list, env: Environment = Environment('~/.aliaspp')):
         self.base_command = ''
         self.flags = {}
         self.args = []
         self.appended_commands: List[Tuple[CommandBuilder, str]] = []
-        self.env = env if env else Environment('~/.aliaspp/env')
+        self.env = env
         self.consumed_args = []
 
         # Parse incoming arguments

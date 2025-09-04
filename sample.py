@@ -1,5 +1,6 @@
 from aliaspp import alias, aliases, execute, Environment, CommandBuilder, ValueRequirement
 
+# Example alias definitions using aliaspp
 # gc = git checkout master
 # gc -b new_branch = git checkout -b pablo/new_branch
 # gc branch = git checkout pablo/branch
@@ -25,25 +26,37 @@ def gac(cb: CommandBuilder):
     cb.base('git add . && git commit')
     cb.if_not_set('m').set_flag('m', cb.get_arg(0, error='Please provide a commit message'))
 
+# Multiple aliases with shared functionality
 # mb = make build
+# pi = pip install
 # mb --alert = make build; terminal-notifier -message "Build Complete"
-@alias
-def mb(cb: CommandBuilder):
-    cb.base('make build')
+# pi ... --alert = pip install ...; terminal-notifier -message "Build Complete"
+@alias({
+    'mb': 'make build',
+    'pi': 'pip install',
+})
+def add_alert(cb: CommandBuilder):
     if cb.is_set('alert'):
         cb.remove_flag('alert')
         alertCb = cb.append_command('terminal-notifier', ';')
         alertCb.set_flag('message', 'Build Complete', dashes=1)
 
+# Registering simple aliases
 aliases({
     'gs': 'git status',
     'cls': 'clear',
 })
 
 # You can also perform a dry run by adding the '--alias-dry-run' flag
-execute(env=Environment('env'), dry_run=True)
+# You can specify a custom environment path where the env file will be stored and where aliases will be installed
+execute(env=Environment('~/.aliaspp'), dry_run=True)
 
 # Add the following line to your shell configuration file (e.g., .bashrc, .zshrc) to use these aliases:
-# alias <alias-name>="python3 ~/aliaspp/sample.py <alias-name>"
+# alias <alias_name>="python3 ~/aliaspp/sample.py <alias_name>"
 # Ex: alias gc="python3 ~/aliaspp/sample.py gc"
-# in the future "aliaspp setup sample.py -v python3" will add this alias for you
+
+# To install the aliases to your shell configuration, run:
+# python3 ~/aliaspp/sample.py --install-aliases
+# Then add the following line to your shell configuration file (e.g., .bashrc, .zshrc):
+# source ~/.aliaspp/.aliases
+# You can change the installation path by providing a different environment path
